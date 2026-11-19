@@ -22,30 +22,23 @@ export function canChangeStatusTo(
   targetStatus: TaskStatus,
   dependenciesSatisfied: boolean
 ): { allowed: boolean; reason?: string } {
-  if (user.role === "PM") {
-    if (task.status === "IN_PROGRESS" && targetStatus === "DONE") {
-      return { allowed: false, reason: "Hanya eksekutor yang boleh menyelesaikan task" };
-    }
-    if (targetStatus === "IN_PROGRESS" && !dependenciesSatisfied) {
-      return { allowed: false, reason: "Dependencies belum selesai" };
-    }
-    return { allowed: true };
+  if (user.role !== "INTERNAL") {
+    return { allowed: false, reason: "Hanya eksekutor yang boleh mengubah status" };
   }
 
-  if (user.role === "INTERNAL") {
-    if (task.assigneeId !== user.id) {
-      return { allowed: false, reason: "Hanya assignee yang boleh mengubah status" };
-    }
-    if (targetStatus === "IN_PROGRESS" && !dependenciesSatisfied) {
-      return { allowed: false, reason: "Dependencies belum selesai. Task masih blocked." };
-    }
-    if (targetStatus === "DONE" && task.status !== "IN_PROGRESS") {
-      return { allowed: false, reason: "Task harus In Progress sebelum Done" };
-    }
-    return { allowed: true };
+  if (task.assigneeId !== user.id) {
+    return { allowed: false, reason: "Hanya assignee yang boleh mengubah status" };
   }
 
-  return { allowed: false, reason: "Client tidak boleh mengubah status" };
+  if (targetStatus === "IN_PROGRESS" && !dependenciesSatisfied) {
+    return { allowed: false, reason: "Dependencies belum selesai. Task masih blocked." };
+  }
+
+  if (targetStatus === "DONE" && !dependenciesSatisfied) {
+    return { allowed: false, reason: "Dependencies belum selesai." };
+  }
+
+  return { allowed: true };
 }
 
 export async function areDependenciesSatisfied(taskId: string): Promise<boolean> {
