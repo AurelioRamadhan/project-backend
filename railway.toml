@@ -1,10 +1,10 @@
 [build]
 builder = "RAILPACK"
-buildCommand = "bun install && bunx prisma generate"
+buildCommand = "bun install && bunx prisma generate --config prisma7.config.ts"
 
 [deploy]
 startCommand = "bun run start"
-preDeployCommand = "bunx prisma migrate deploy && bun run seed"
+preDeployCommand = "bunx prisma migrate deploy --config prisma7.config.ts && bun run seed"
 healthcheckPath = "/health"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
