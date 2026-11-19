@@ -5,6 +5,9 @@
   "seed": "bun run prisma/seed.ts",
   "start": "bun run src/index.ts"
   },
+   "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
     "@nodewave/prisma-ezfilter": "^0.2.1",
     "@prisma/adapter-pg": "7",
