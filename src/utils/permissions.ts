@@ -22,11 +22,15 @@ export function canChangeStatusTo(
   targetStatus: TaskStatus,
   dependenciesSatisfied: boolean
 ): { allowed: boolean; reason?: string } {
-  if (user.role !== "INTERNAL") {
+  if (user.role === "CLIENT") {
     return { allowed: false, reason: "Hanya eksekutor yang boleh mengubah status" };
   }
 
-  if (task.assigneeId !== user.id) {
+  if (user.role === "PM" && targetStatus === "DONE") {
+    return { allowed: false, reason: "Hanya executor yang ditugaskan yang boleh menyelesaikan task" };
+  }
+
+  if (user.role === "INTERNAL" && task.assigneeId !== user.id) {
     return { allowed: false, reason: "Hanya assignee yang boleh mengubah status" };
   }
 

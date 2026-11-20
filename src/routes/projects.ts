@@ -52,16 +52,10 @@ projectRoutes.get("/", async (c) => {
       take,
       orderBy: order,
       include: {
-        client: { select: { id: true, name: true, email: true } },
-        members: {
-          include: {
-            user: {
-              select: { id: true, name: true, email: true, role: true, department: true },
-            },
-          },
-        },
+        client: user.role === "CLIENT" ? false : { select: { id: true, name: true, email: true } },
+        members: user.role === "CLIENT" ? false : { where: { deletedAt: null }, include: { user: { select: { id: true, name: true, email: true, role: true, department: true } } } },
         tasks: {
-          where: { deletedAt: null },
+          where: { deletedAt: null, ...(user.role === "CLIENT" ? { isClientVisible: true } : {}) },
           select: { id: true, status: true },
         },
       },
@@ -73,10 +67,8 @@ projectRoutes.get("/", async (c) => {
     const doneTasks = p.tasks.filter((t) => t.status === "DONE").length;
     const progress = totalTasks ? Math.round((doneTasks / totalTasks) * 100) : 0;
     const { tasks, ...rest } = p;
-    return {
-      ...rest,
-      stats: { totalTasks, doneTasks, progress },
-    };
+    if (user.role === "CLIENT") return { id: p.id, name: p.name, description: p.description, startDate: p.startDate, dueDate: p.dueDate, stats: { totalTasks, doneTasks, progress } };
+    return { ...rest, stats: { totalTasks, doneTasks, progress } };
   });
 
   return c.json({
@@ -170,17 +162,15 @@ projectRoutes.put("/:id", requireRole("PM"), async (c) => {
   await prisma.project.update({ where: { id }, data });
 
   if (memberIds !== undefined) {
-    await prisma.projectMember.updateMany({
-      where: { projectId: id, deletedAt: null },
-      data: { deletedAt: new Date() },
-    });
-    if (memberIds.length) {
-      await prisma.projectMember.createMany({
-        data: memberIds.map((userId) => ({ projectId: id, userId })),
-      });
+    const uniqueMemberIds = [...new Set(memberIds)];
+    const activeMembers = await prisma.projectMember.findMany({ where: { projectId: id, deletedAt: null }, select: { userId: true } });
+    const activeIds = new Set(activeMembers.map((member) => member.userId));
+    await prisma.projectMember.updateMany({ where: { projectId: id, deletedAt: null, userId: { notIn: uniqueMemberIds } }, data: { deletedAt: new Date() } });
+    for (const userId of uniqueMemberIds) {
+      if (activeIds.has(userId)) continue;
+      await prisma.projectMember.upsert({ where: { projectId_userId: { projectId: id, userId } }, create: { projectId: id, userId }, update: { deletedAt: null } });
     }
   }
-
   const fresh = await prisma.project.findUnique({
     where: { id },
     include: {
@@ -199,17 +189,22 @@ projectRoutes.put("/:id", requireRole("PM"), async (c) => {
 });
 
 projectRoutes.delete("/:id", requireRole("PM"), async (c) => {
-  await prisma.project.update({
-    where: { id: c.req.param("id") },
-    data: { deletedAt: new Date() },
-  });
+  const id = c.req.param("id");
+  const result = await prisma.project.updateMany({ where: { id, deletedAt: null }, data: { deletedAt: new Date() } });
+  if (!result.count) return c.json({ error: "Project tidak ditemukan" }, 404);
   return c.json({ ok: true });
 });
 
 projectRoutes.post("/:id/members", requireRole("PM"), async (c) => {
   const projectId = c.req.param("id");
   const { userId } = await c.req.json();
-  const member = await prisma.projectMember.create({ data: { projectId, userId } });
+  const project = await prisma.project.findFirst({ where: { id: projectId, deletedAt: null } });
+  if (!project) return c.json({ error: "Project tidak ditemukan" }, 404);
+  const member = await prisma.projectMember.upsert({
+    where: { projectId_userId: { projectId, userId } },
+    create: { projectId, userId },
+    update: { deletedAt: null },
+  });
   return c.json(member, 201);
 });
 
